@@ -207,15 +207,15 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     except Exception:
         pass  # Non-fatal if JS eval is unavailable
 
-    # Input loop limited to 5 user messages
-    if st.session_state.user_message_count < 5 and not st.session_state.stop_requested:
+    # Chat loop (no message cap)
+    if not st.session_state.stop_requested:
         if prompt := st.chat_input("Your concept / refinement", max_chars=1000):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
 
-            # Model responds for first 4 user messages (original logic)
-            if st.session_state.user_message_count < 4:
+            # Model responds on every user message (until stopped)
+            if True:
                 try:
                     with st.chat_message("assistant"):
                         stream = client.chat.completions.create(
@@ -257,84 +257,9 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
             # Increment the user message count
             st.session_state.user_message_count += 1
 
-    # End interview after 5 user messages or when stopped
-    if st.session_state.user_message_count >= 5 or st.session_state.stop_requested:
+    # End chat only when stopped
+    if st.session_state.stop_requested:
         st.session_state.chat_complete = True
-
-# ---------- Get Feedback ----------
-if (
-        st.session_state.chat_complete
-        and not st.session_state.feedback_shown
-        and not st.session_state.stopped_early
-        and st.session_state.user_message_count > 0
-):
-    if st.button("Get Summary", on_click=show_feedback):
-        st.write("Generating summary...")
-
-if (
-        st.session_state.chat_complete
-        and not st.session_state.feedback_shown
-        and st.session_state.stopped_early
-):
-    st.info("Interview was stopped before it began.", icon="🛑")
-    if st.button("Restart Interview", type="primary", key="restart_early"):
-        streamlit_js_eval(js_expressions="parent.window.location.reload()")
-
-# ---------- Feedback screen ----------
-if st.session_state.feedback_shown:
-    if st.session_state.stopped_early or st.session_state.user_message_count == 0:
-        st.info("Interview was stopped before it began. No feedback available.")
-        # Optional: also offer Restart here as a fallback (won't normally hit due to gating above)
-        if st.button("Restart Interview", type="primary", key="restart_guard"):
-            streamlit_js_eval(js_expressions="parent.window.location.reload()")
-        st.stop()
-    st.subheader("Summary (temporary)")
-
-    conversation_history = "\n".join(
-        [f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages]
-    )
-
-    try:
-        feedback_completion = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful tool that provides feedback on an interviewee performance. "
-                        "Before the Feedback give a score of 1 to 10.\n"
-                        "Follow this format:\n"
-                        "Overal Score: //Your score\n"
-                        "Feedback: //Here you put your feedback\n"
-                        "Give only the feedback do not ask any additional questins."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "This is the interview you need to evaluate. "
-                        "Keep in mind that you are only a tool. "
-                        "And you shouldn't engage in any converstation: "
-                        f"{conversation_history}"
-                    ),
-                },
-            ],
-        )
-        st.write(feedback_completion.choices[0].message.content)
-    except Exception as e:
-        st.error(f"Feedback generation failed: {e}")
-
-    # Allow user to download full conversation as .txt
-    transcript = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
-    st.download_button(
-        label="Download Draft",
-        data=transcript,
-        file_name="build_draft.txt",
-        mime="text/plain"
-    )
-
-    if st.button("Restart Interview", type="primary"):
-        streamlit_js_eval(js_expressions="parent.window.location.reload()")
 
 st.markdown("---")
 st.markdown(f"<small>v0.1 • Concept-to-Build • Model: {st.session_state.get('openai_model', 'n/a')}</small>",
