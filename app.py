@@ -65,12 +65,6 @@ defaults = {
     "feedback_shown": False,
     "chat_complete": False,
     "messages": [],
-    "name": "",
-    "experience": "",
-    "skills": "",
-    "level": "Junior",
-    "position": "Data Scientist",
-    "company": "Amazon",
     "openai_model": "gpt-4.1-mini",
     # Stop-control state
     "stop_requested": False,
@@ -88,11 +82,6 @@ for k, v in defaults.items():
 def complete_setup() -> None:
     """Mark setup as complete."""
     st.session_state.setup_complete = True
-
-
-def show_feedback() -> None:
-    """Show feedback section."""
-    st.session_state.feedback_shown = True
 
 
 def request_stop() -> None:
@@ -123,8 +112,8 @@ if not st.session_state.setup_complete:
     if st.button("Start Build", on_click=complete_setup):
         st.write("Setup complete. Starting build...")
 
-# ---------- Interview phase ----------
-if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
+# ---------- Chat phase ----------
+if st.session_state.setup_complete and not st.session_state.chat_complete:
     st.info("Describe your character concept to begin.", icon="👋")
 
     # Initialize system message only once
@@ -154,9 +143,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                     "(5) In SRD-only mode: prefer ASIs; only mention feats if you are certain they are SRD-available, otherwise explicitly skip feats, "
                     "(6) Short RP hooks (2–4 bullets).\n"
                     "- Keep it concise and practical. No copyrighted text.\n"
-                )
-
-                ,
+                ),
             }
         ]
 
@@ -253,9 +240,6 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
                 except Exception as e:
                     st.error(f"Assistant response failed: {e}")
-
-            # Increment the user message count
-            st.session_state.user_message_count += 1
 
     # End chat only when stopped
     if st.session_state.stop_requested:
