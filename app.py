@@ -78,6 +78,9 @@ defaults = {
     "stop_requested": False,
     # mark if Stop was pressed before any user message
     "stopped_early": False,
+    # Idea #5 controls (public repo = SRD-only; no other sources shipped)
+    "build_level": 5,
+    "homebrew": False,
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -104,55 +107,20 @@ def request_stop() -> None:
 
 # ---------- Setup stage ----------
 if not st.session_state.setup_complete:
-    st.subheader("Concept Setup (temporary)")
+    st.subheader("Concept Setup")
 
-    st.session_state["name"] = st.text_input(
-        label="Name",
-        value=st.session_state["name"],
-        placeholder="Enter your name",
-        max_chars=40,
-    )
-    st.session_state["experience"] = st.text_area(
-        label="Experience",
-        value=st.session_state["experience"],
-        placeholder="Describe your experience",
-        max_chars=200,
-    )
-    st.session_state["skills"] = st.text_area(
-        label="Skills",
-        value=st.session_state["skills"],
-        placeholder="List your skills",
-        max_chars=200,
+    st.session_state["build_level"] = st.selectbox(
+        "Character level",
+        options=list(range(1, 21)),
+        index=list(range(1, 21)).index(st.session_state["build_level"]),
     )
 
-    st.subheader("Constraints (temporary)")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.session_state["level"] = st.radio(
-            "Choose level",
-            options=["Junior", "Mid-level", "Senior"],
-            index=["Junior", "Mid-level", "Senior"].index(st.session_state["level"]),
-            key="level_radio",
-        )
-    with col2:
-        st.session_state["position"] = st.selectbox(
-            "Choose a position",
-            ("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst"),
-            index=("Data Scientist", "Data Engineer", "ML Engineer", "BI Analyst", "Financial Analyst").index(
-                st.session_state["position"]
-            ),
-            key="position_select",
-        )
-
-    st.session_state["company"] = st.selectbox(
-        "Select a Company",
-        ("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify"),
-        index=("Amazon", "Meta", "Udemy", "365 Company", "Nestle", "LinkedIn", "Spotify").index(
-            st.session_state["company"]
-        ),
-        key="company_select",
+    st.session_state["homebrew"] = st.toggle(
+        "Homebrew (RP-only, clearly labeled)", value=st.session_state["homebrew"]
     )
+
+    # Public repo policy: SRD-only. Additional books are intentionally not supported here.
+    st.caption("Sources: SRD-only (public repo).")
 
     if st.button("Start Build", on_click=complete_setup):
         st.write("Setup complete. Starting build...")
