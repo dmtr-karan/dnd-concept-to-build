@@ -245,6 +245,12 @@ if st.session_state.setup_complete and not st.session_state.chat_complete:
     if st.session_state.stop_requested:
         st.session_state.chat_complete = True
 
+if st.session_state.chat_complete:
+    st.info("Generation stopped by user.", icon="🛑")
+    if st.button("Restart Build", key="restart_after_stop"):
+        streamlit_js_eval(js_expressions="parent.window.location.reload()")
+
+
 st.markdown("---")
 st.markdown(f"<small>v0.1 • Concept-to-Build • Model: {st.session_state.get('openai_model', 'n/a')}</small>",
             unsafe_allow_html=True)
