@@ -1,11 +1,9 @@
-"""Streamlit interview simulator.
+"""D&D Concept-to-Build (RP-first).
 
-Features:
-- Guided setup (candidate + target role)
-- Chat interview (OpenAI Chat Completions, streaming)
-- Stop control (button + ESC) with early-stop rule
-- Post-interview feedback generator
+Current stage: base app imported from interview simulator.
+We are only re-skinning UI text in this step (no logic changes yet).
 """
+
 
 
 import os
@@ -14,7 +12,7 @@ from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
 
 # ---------- Page config ----------
-st.set_page_config(page_title="StreamlitChatMessageHistory", page_icon="💬")
+st.set_page_config(page_title="D&D Concept-to-Build", page_icon="🧙")
 # ---------- UI polish ----------
 st.markdown(
     """
@@ -29,8 +27,8 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.title("Chatbot")
-st.caption("A minimal Streamlit interview simulator using OpenAI with Stop + feedback flow.")
+st.title("🧙 D&D Concept-to-Build")
+st.caption("RP-first concept → build draft (base app imported; re-skin step).")
 
 
 # ---------- Secrets & client setup (unified) ----------
@@ -106,7 +104,7 @@ def request_stop() -> None:
 
 # ---------- Setup stage ----------
 if not st.session_state.setup_complete:
-    st.subheader("Personal Information")
+    st.subheader("Concept Setup (temporary)")
 
     st.session_state["name"] = st.text_input(
         label="Name",
@@ -127,7 +125,7 @@ if not st.session_state.setup_complete:
         max_chars=200,
     )
 
-    st.subheader("Company and Position")
+    st.subheader("Constraints (temporary)")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -156,12 +154,12 @@ if not st.session_state.setup_complete:
         key="company_select",
     )
 
-    if st.button("Start Interview", on_click=complete_setup):
-        st.write("Setup complete. Starting interview...")
+    if st.button("Start Build", on_click=complete_setup):
+        st.write("Setup complete. Starting build...")
 
 # ---------- Interview phase ----------
 if st.session_state.setup_complete and not st.session_state.feedback_shown and not st.session_state.chat_complete:
-    st.info("Start by introducing yourself", icon="👋")
+    st.info("Describe your character concept to begin.", icon="👋")
 
     # Initialize system message only once
     if not st.session_state.messages:
@@ -186,7 +184,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
     # ---------- Stop controls (button + ESC) ----------
     # ---------- Controls (sidebar) ----------
     with st.sidebar:
-        st.markdown("### Controls")
+        st.markdown("### Controls (temporary)")
         st.button(
             "🛑 Stop",
             on_click=request_stop,
@@ -226,7 +224,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
 
     # Input loop limited to 5 user messages
     if st.session_state.user_message_count < 5 and not st.session_state.stop_requested:
-        if prompt := st.chat_input("Your response", max_chars=1000):
+        if prompt := st.chat_input("Your concept / refinement", max_chars=1000):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -263,7 +261,7 @@ if st.session_state.setup_complete and not st.session_state.feedback_shown and n
                     # If user requested stop during streaming, mark interview complete
                     if st.session_state.stop_requested:
                         st.session_state.chat_complete = True
-                        st.info("Interview stopped by user.", icon="🛑")
+                        st.info("Generation stopped by user.", icon="🛑")
 
                     # Persist whatever was generated (even if empty)
                     st.session_state.messages.append({"role": "assistant", "content": full_response})
@@ -285,8 +283,8 @@ if (
     and not st.session_state.stopped_early
     and st.session_state.user_message_count > 0
 ):
-    if st.button("Get Feedback", on_click=show_feedback):
-        st.write("Fetching feedback...")
+    if st.button("Get Summary", on_click=show_feedback):
+        st.write("Generating summary...")
 
 if (
     st.session_state.chat_complete
@@ -305,7 +303,7 @@ if st.session_state.feedback_shown:
         if st.button("Restart Interview", type="primary", key="restart_guard"):
             streamlit_js_eval(js_expressions="parent.window.location.reload()")
         st.stop()
-    st.subheader("Feedback")
+    st.subheader("Summary (temporary)")
 
     conversation_history = "\n".join(
         [f"{msg['role']}: {msg['content']}" for msg in st.session_state.messages]
@@ -344,9 +342,9 @@ if st.session_state.feedback_shown:
     # Allow user to download full conversation as .txt
     transcript = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.messages])
     st.download_button(
-        label="Download Transcript",
+        label="Download Draft",
         data=transcript,
-        file_name="interview_transcript.txt",
+        file_name="build_draft.txt",
         mime="text/plain"
     )
 
@@ -354,4 +352,4 @@ if st.session_state.feedback_shown:
         streamlit_js_eval(js_expressions="parent.window.location.reload()")
 
 st.markdown("---")
-st.markdown(f"<small>v0.1 • Model: {st.session_state.get('openai_model','n/a')}</small>", unsafe_allow_html=True)
+st.markdown(f"<small>v0.1 • Concept-to-Build • Model: {st.session_state.get('openai_model','n/a')}</small>", unsafe_allow_html=True)
