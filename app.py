@@ -72,6 +72,7 @@ defaults = {
     "stopped_early": False,
     # Idea #5 controls (public repo = SRD-only; no other sources shipped)
     "build_level": 5,
+    "is_generating": False,
     "homebrew": False,
 }
 for k, v in defaults.items():
@@ -127,6 +128,10 @@ if st.session_state.setup_complete and not st.session_state.chat_complete:
                     "Hard rule:\n"
                     "- If you are not sure an option is in SRD, do not name it; instead say 'SRD limitation' and offer a generic SRD-safe alternative (e.g., base class choice + ASIs + generic spell themes).\n"
                     "- Only recommend options that exist in the SRD dataset shipped with this app.\n"
+                    "- Never claim you are 'set to SRD-only mode' if Homebrew is ON. Always follow the UI Homebrew toggle.\n"
+                    "- If the user requests homebrew (e.g., says 'HB', 'homebrew', 'invent') AND Homebrew is OFF: do not generate homebrew. Instead, proceed SRD-only and add one final line: 'Want homebrew elements? Toggle Homebrew ON in the UI and ask again.'\n"
+                    "- If the user asks a meta question like '12th lvl ok?', answer briefly (e.g., 'Yes') and ask for the concept template; do NOT restate the current Target level from constraints.\n"
+                    "- Never ask the user whether to stick to SRD-only vs homebrew; follow the UI setting. Only ask for the character concept if missing.\n"
                     "- If the concept suggests a non-SRD subclass/spell/feat, say it's unavailable in SRD and offer a generic SRD-safe alternative without naming book-specific options.\n"
                     "- Do not mention non-SRD options by name (even to disclaim them). Just say 'SRD limitation' and proceed with SRD-safe choices.\n"
                     "- Never invent subclass names, land types, or 'winter variants'. If you cannot name a subclass with certainty as SRD, do not name any subclass.\n"
@@ -137,7 +142,8 @@ if st.session_state.setup_complete and not st.session_state.chat_complete:
                     f"- Homebrew: {'ON' if st.session_state['homebrew'] else 'OFF'} "
                     "(If ON: you MAY invent RP-flavored options, but label them clearly as HOMEBREW.)\n\n"
                     "Output style:\n"
-                    "- Ask at most 1 clarifying question if needed; otherwise proceed.\n"
+                    "- Decide fast: If the user message is a CONCEPT (even vague, e.g., two words), proceed with a best-effort draft immediately and ask at most ONE follow-up question at the end. If the user message is NOT a concept, reply with: (a) a one-line confirmation, then (b) ONE request for a one-sentence concept using this template: '<fantasy vibe> <class vibe> <key motif> <tone>'.\n"
+                    "- Do not restate constraints unless you are actually producing a build draft.\n"
                     "- Provide: (1) Concept summary, (2) Class: <name>. Subclass: <name or 'SRD limitation (not specified)'>. RP rationale, "
                     "(3) Key feature milestones up to the target level, (4) Spell suggestions if applicable (SRD-only), "
                     "(5) In SRD-only mode: prefer ASIs; only mention feats if you are certain they are SRD-available, otherwise explicitly skip feats, "
@@ -156,33 +162,50 @@ if st.session_state.setup_complete and not st.session_state.chat_complete:
     # ---------- Stop controls (button + ESC) ----------
     # ---------- Controls (sidebar) ----------
     with st.sidebar:
-        st.markdown("### Controls (temporary)")
+        st.markdown("### Constraints")
+        st.session_state["build_level"] = st.selectbox(
+            "Level",
+            options=list(range(1, 21)),
+            index=list(range(1, 21)).index(st.session_state["build_level"]),
+            key="sidebar_level",
+        )
+        st.session_state["homebrew"] = st.toggle(
+            "Homebrew",
+            value=st.session_state["homebrew"],
+            key="sidebar_homebrew",
+            help="If ON, the assistant may include clearly-labeled HOMEBREW options.",
+        )
+
+        st.markdown("### Controls")
         st.button(
             "🛑 Stop",
             on_click=request_stop,
             key="stop_btn",
             help="Stop the current response",
-            disabled=st.session_state.get("stop_requested", False)
+            disabled=st.session_state.get("stop_requested", False),
+        )
+    # Keep system constraints in sync with current controls
+    if st.session_state.messages and st.session_state.messages[0].get("role") == "system":
+        st.session_state.messages[0]["content"] = st.session_state.messages[0]["content"].split("Constraints:\n")[0] + (
+            "Constraints:\n"
+            f"- Target level: {st.session_state['build_level']}\n"
+            f"- Homebrew: {'ON' if st.session_state['homebrew'] else 'OFF'} "
+            "(If ON: you MAY invent RP-flavored options, but label them clearly as HOMEBREW.)\n\n"
+            "Output style:\n"
+            "- Ask at most 1 clarifying question if needed; otherwise proceed.\n"
+            "- Provide: (1) Concept summary, (2) Class: <name>. Subclass: <name or 'SRD limitation (not specified)'>. RP rationale, "
+            "(3) Key feature milestones up to the target level, (4) Spell suggestions if applicable (SRD-only), "
+            "(5) In SRD-only mode: prefer ASIs; only mention feats if you are certain they are SRD-available, otherwise explicitly skip feats, "
+            "(6) Short RP hooks (2–4 bullets).\n"
+            "- Keep it concise and practical. No copyrighted text.\n"
         )
 
     # ESC key listener via streamlit_js_eval (best-effort; safe to ignore if unsupported)
     try:
         esc_signal = streamlit_js_eval(
             js_expressions=[
-                # Install a one-time keydown listener
-                """
-                if (!window.__stopEscListenerInstalled) {
-                    window.addEventListener('keydown', (e) => {
-                        if (e.key === 'Escape') {
-                            window.name = 'STOP_REQUESTED';
-                        }
-                    });
-                    window.__stopEscListenerInstalled = true;
-                }
-                'OK'
-                """,
-                # Read the flag
-                "window.name || ''"
+                """ ... install listener ... """,
+                "(function(){const v = window.name || ''; if (v === 'STOP_REQUESTED') { window.name = ''; } return v; })()"
             ],
             key="esc_listener"
         )
@@ -196,14 +219,14 @@ if st.session_state.setup_complete and not st.session_state.chat_complete:
 
     # Chat loop (no message cap)
     if not st.session_state.stop_requested:
-        if prompt := st.chat_input("Your concept / refinement", max_chars=1000):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            # Model responds on every user message (until stopped)
-            if True:
+        if not st.session_state.get("is_generating", False):
+            if prompt := st.chat_input("Your concept / refinement", max_chars=1000):
+                st.session_state.is_generating = True
                 try:
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
+
                     with st.chat_message("assistant"):
                         stream = client.chat.completions.create(
                             model=st.session_state["openai_model"],
@@ -211,35 +234,25 @@ if st.session_state.setup_complete and not st.session_state.chat_complete:
                             stream=True,
                         )
 
-                        # Manual stream rendering with early-stop support
                         placeholder = st.empty()
                         full_response = ""
-                        try:
-                            for chunk in stream:
-                                # Respect Stop from button or ESC
-                                if st.session_state.stop_requested:
-                                    break
-                                # Extract streamed delta content (OpenAI Chat Completions stream)
-                                try:
-                                    delta = chunk.choices[0].delta.content
-                                except Exception:
-                                    delta = None
-                                if delta:
-                                    full_response += delta
-                                    placeholder.markdown(full_response)
-                        except Exception as e:
-                            st.error(f"Assistant streaming failed: {e}")
+                        for chunk in stream:
+                            if st.session_state.stop_requested:
+                                break
+                            delta = getattr(chunk.choices[0].delta, "content", None)
+                            if delta:
+                                full_response += delta
+                                placeholder.markdown(full_response)
 
-                    # If user requested stop during streaming, mark interview complete
-                    if st.session_state.stop_requested:
-                        st.session_state.chat_complete = True
-                        st.info("Generation stopped by user.", icon="🛑")
+                    if full_response.strip():
+                        st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    else:
+                        st.warning("No assistant text was received (empty stream). Please try again.")
 
-                    # Persist whatever was generated (even if empty)
-                    st.session_state.messages.append({"role": "assistant", "content": full_response})
+                    # st.session_state.user_message_count += 1
 
-                except Exception as e:
-                    st.error(f"Assistant response failed: {e}")
+                finally:
+                    st.session_state.is_generating = False
 
     # End chat only when stopped
     if st.session_state.stop_requested:
