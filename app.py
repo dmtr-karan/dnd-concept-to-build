@@ -72,16 +72,18 @@ def build_system_prompt(build_level: int, homebrew: bool) -> str:
         "- If the concept suggests a non-SRD subclass/spell/feat, say it's unavailable in SRD and offer a generic SRD-safe alternative without naming non-SRD options.\n"
         "- Do not mention non-SRD options by name (even to disclaim them). Just say 'SRD limitation' and proceed with SRD-safe choices.\n"
         "- Never invent subclass names. If you cannot name a subclass with certainty as SRD, do not name any subclass.\n"
+        "- Spells: Do not name spells or spell categories unless they are explicitly provided by the grounding service; otherwise write 'SRD limitation (spells not grounded)'.\n"
         "- If subclass is uncertain: write 'Subclass: SRD limitation (not specified)' and proceed with a class-first build using SRD-safe spell/ASI suggestions.\n\n"
         f"Constraints:\n"
         f"- Target level: {build_level}\n"
         f"- Homebrew: {'ON' if homebrew else 'OFF'} "
         "(If ON: you MAY invent RP-flavored options, but label them clearly as HOMEBREW.)\n\n"
         "Output style:\n"
-        "- Decide fast: If the user message is a CONCEPT (even vague, e.g., two words), proceed with a best-effort draft immediately and ask at most ONE follow-up question at the end. If the user message is NOT a concept, reply with: (a) a one-line confirmation, then (b) ONE request for a one-sentence concept using this template: '<fantasy vibe> <class vibe> <key motif> <tone>'.\n"
+        "- Decide fast: Treat any message with 3+ words OR containing a class word (barbarian/bard/fighter/wizard) OR mentioning a level as a CONCEPT and produce a best-effort draft immediately (ask at most ONE follow-up at the end). Only if the message is empty or purely meta (e.g., '12th lvl ok?') reply with: (a) a one-line confirmation, then (b) ONE request for a one-sentence concept using this template: '<fantasy vibe> <class vibe> <key motif> <tone>'.\n"
         "- Do not restate constraints unless you are actually producing a build draft.\n"
         "- Provide: (1) Concept summary, (2) Class: <name>. Subclass: <name or 'SRD limitation (not specified)'>. RP rationale, "
-        "(3) Key feature milestones up to the target level, (4) Spell suggestions if applicable (SRD-only), "
+        "(3) Key feature milestones up to the target level, "
+        "(4) Spell suggestions: OUTPUT MUST BE EXACTLY ONE LINE. - If spells are not explicitly provided by the grounding service, output exactly: SRD limitation (spells not grounded). - Do not add any other text in section (4) in that case,"
         "(5) In SRD-only mode: prefer ASIs; only mention feats if you are certain they are SRD-available, otherwise explicitly skip feats, "
         "(6) Short RP hooks (2–4 bullets).\n"
         "- Keep it concise and practical. No copyrighted text.\n"
@@ -148,9 +150,10 @@ def build_grounded_srd_block(class_payload: dict, target_level: int) -> str:
         "otherwise write 'SRD limitation'. (Spells are not provided by the grounding service in this version.)"
     )
     lines.append(
-        "Spells: Do not name any spells. If the user asks for spells, respond with 'SRD limitation (spells not available from grounding service)'.")
-    lines.append(
-        "Spells: SRD limitation (spells not available from grounding service). Do not name spells or specific spell categories; keep spell discussion generic.")
+        "Spells: SRD limitation (spells not available from grounding service). "
+        "Do not name spells or spell categories; keep spell discussion generic."
+    )
+    lines.append('Spells: If not grounded, output section (4) exactly as: "SRD limitation (spells not grounded)."')
     return "\n".join(lines)
 
 
@@ -183,6 +186,7 @@ def main() -> None:
         "session_id": "",
         "session_title": "",
         "build_versions": [],
+        "class_hint": "(auto)",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -269,6 +273,13 @@ def main() -> None:
 
         st.caption("Sources: SRD-only (public repo).")
 
+        st.session_state["class_hint"] = st.selectbox(
+            "Class (optional, improves SRD grounding)",
+            options=["(auto)", "Barbarian", "Bard", "Fighter", "Wizard"],
+            index=["(auto)", "Barbarian", "Bard", "Fighter", "Wizard"].index(
+                st.session_state.get("class_hint", "(auto)")),
+        )
+
         if st.button("Start Build", on_click=complete_setup):
             st.write("Setup complete. Starting build...")
 
@@ -305,6 +316,14 @@ def main() -> None:
                 value=st.session_state["homebrew"],
                 key="sidebar_homebrew",
                 help="If ON, the assistant may include clearly-labeled HOMEBREW options.",
+            )
+
+            st.session_state["class_hint"] = st.selectbox(
+                "Class (grounding)",
+                options=["(auto)", "Barbarian", "Bard", "Fighter", "Wizard"],
+                index=["(auto)", "Barbarian", "Bard", "Fighter", "Wizard"].index(
+                    st.session_state.get("class_hint", "(auto)")),
+                key="sidebar_class_hint",
             )
 
             st.markdown("### Controls")
@@ -447,9 +466,16 @@ def main() -> None:
 
                             # Detect one of the shipped SRD classes from the user prompt (minimal, deterministic).
                             grounding_block = ""
-                            m = re.search(r"\b(barbarian|bard|fighter|wizard)\b", prompt.lower())
-                            if srd_base and m:
-                                class_name = m.group(1)
+                            class_name = ""
+                            hint = str(st.session_state.get("class_hint", "(auto)")).strip()
+                            if hint and hint != "(auto)":
+                                class_name = hint.lower()
+                            else:
+                                m = re.search(r"\b(barbarian|bard|fighter|wizard)\b", prompt.lower())
+                                if m:
+                                    class_name = m.group(1)
+
+                            if srd_base and class_name:
                                 class_payload, err = srd_client.get_class(srd_base, class_name)
                                 if class_payload and not err:
                                     grounding_block = build_grounded_srd_block(class_payload, target_level=int(
