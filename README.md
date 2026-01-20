@@ -62,6 +62,14 @@ Docs:
    - `pip install -r requirements.txt`
    - `streamlit run app.py`
 
+## Optional: SRD Grounding API
+
+You can optionally run the SRD grounding API locally (from `dnd-srd-mongo`) and point this app to it:
+
+- Set `SRD_API_BASE_URL` (local env or Streamlit secrets), e.g. `http://127.0.0.1:8000`
+- When set, the app will fetch SRD class data and inject a **Grounded SRD Facts** block into the model context.
+- If not set, the app runs normally (no grounding).
+
 ## Run on Streamlit Community Cloud
 1) Push this repo to GitHub (public).
 2) Streamlit Community Cloud -> New app -> select repo/branch -> entry point `app.py`.
@@ -98,7 +106,6 @@ Run only unit:
 Run only contract:
 - `python -m pytest -m contract`
 
-## Future work (out of scope for P3)
-- P4: FastAPI SRD grounding service (backed by `dnd-srd-mongo`)
-- P5: Export validators / formal contracts
-- P6: UX polish beyond documentation references
+## Future work
+- Export validators / formal contracts
+- UX polish beyond documentation references
