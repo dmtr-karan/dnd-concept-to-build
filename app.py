@@ -50,6 +50,10 @@ def should_append_assistant_message(text: str) -> bool:
     return bool(text.strip())
 
 
+# NOTE (docs-only):
+# - This function defines the SRD-only + Homebrew-toggle contract enforced by tests.
+# - Keep SRD-only rules and the HB ON/OFF behavior consistent with docs/ai-guardrails.md.
+# - The app rebuilds this prompt on start, on load, and on every rerun when constraints change.
 def build_system_prompt(build_level: int, homebrew: bool) -> str:
     """Build the system prompt (pure function; safe to unit-test)."""
     return (
