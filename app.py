@@ -73,7 +73,7 @@ def build_system_prompt(build_level: int, homebrew: bool) -> str:
         "- Do not mention non-SRD options by name (even to disclaim them). Just say 'SRD limitation' and proceed with SRD-safe choices.\n"
         "- Never invent subclass names. If you cannot name a subclass with certainty as SRD, do not name any subclass.\n"
         "- Spells: Do not name spells or spell categories unless they are explicitly provided by the grounding service; otherwise write 'SRD limitation (spells not grounded)'.\n"
-        "- If subclass is uncertain: write 'Subclass: SRD limitation (not specified)' and proceed with a class-first build using SRD-safe spell/ASI suggestions.\n\n"
+        "- If subclass is uncertain: write 'Subclass: SRD limitation (not specified)' and proceed with a class-first build using SRD-safe ASI guidance (no spells unless grounded).\n\n"
         f"Constraints:\n"
         f"- Target level: {build_level}\n"
         f"- Homebrew: {'ON' if homebrew else 'OFF'} "
@@ -82,7 +82,7 @@ def build_system_prompt(build_level: int, homebrew: bool) -> str:
         "- Decide fast: Treat any message with 3+ words OR containing a class word (barbarian/bard/fighter/wizard) OR mentioning a level as a CONCEPT and produce a best-effort draft immediately (ask at most ONE follow-up at the end). Only if the message is empty or purely meta (e.g., '12th lvl ok?') reply with: (a) a one-line confirmation, then (b) ONE request for a one-sentence concept using this template: '<fantasy vibe> <class vibe> <key motif> <tone>'.\n"
         "- Do not restate constraints unless you are actually producing a build draft.\n"
         "- Provide: (1) Concept summary, (2) Class: <name>. Subclass: <name or 'SRD limitation (not specified)'>. RP rationale, "
-        "(3) Key feature milestones up to the target level, "
+        "(3) Key feature milestones up to the target level,\n"
         "(4) Spell suggestions: OUTPUT MUST BE EXACTLY ONE LINE. - If spells are not explicitly provided by the grounding service, output exactly: SRD limitation (spells not grounded). - Do not add any other text in section (4) in that case,"
         "(5) In SRD-only mode: prefer ASIs; only mention feats if you are certain they are SRD-available, otherwise explicitly skip feats, "
         "(6) Short RP hooks (2–4 bullets).\n"
@@ -211,6 +211,12 @@ def main() -> None:
             "openai_model",
             st.session_state.get("openai_model", "gpt-4.1-mini"),
         )
+        st.session_state["class_hint"] = params.get("class_hint", st.session_state.get("class_hint", "(auto)"))
+
+        # IMPORTANT: sync widget keys so the sidebar widgets don't overwrite loaded values on render
+        st.session_state["sidebar_level"] = st.session_state["build_level"]
+        st.session_state["sidebar_homebrew"] = st.session_state["homebrew"]
+        st.session_state["sidebar_class_hint"] = st.session_state["class_hint"]
 
         loaded_messages = pending.get("messages", []) or []
 
@@ -357,6 +363,7 @@ def main() -> None:
                         "build_level": int(st.session_state.get("build_level", 5)),
                         "homebrew": bool(st.session_state.get("homebrew", False)),
                         "openai_model": st.session_state.get("openai_model", ""),
+                        "class_hint": st.session_state.get("class_hint", "(auto)"),
                     },
                     "messages": st.session_state.get("messages", []),
                     "versions": st.session_state.get("build_versions", []),
@@ -387,6 +394,7 @@ def main() -> None:
                             "build_level": int(st.session_state.get("build_level", 5)),
                             "homebrew": bool(st.session_state.get("homebrew", False)),
                             "openai_model": st.session_state.get("openai_model", ""),
+                            "class_hint": st.session_state.get("class_hint", "(auto)"),
                         },
                         "messages": st.session_state.get("messages", []),
                         "versions": st.session_state.get("build_versions", []),
