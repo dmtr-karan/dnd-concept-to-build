@@ -140,8 +140,17 @@ def build_grounded_srd_block(class_payload: dict, target_level: int) -> str:
 
     lines.append(
         "Rule: Treat the Grounded SRD Facts above as authoritative SRD truth. "
-        "If a detail is not present above, do NOT assert it as SRD; either omit it or say 'SRD limitation'."
+        "If a detail is not present above, do NOT assert it as SRD and do NOT provide mechanics/rules text; "
+        "either omit it or say 'SRD limitation'."
     )
+    lines.append(
+        "Additional rule: Do NOT name subclasses/archetypes/traditions and do NOT list spells unless they are explicitly present in the grounded payload above; "
+        "otherwise write 'SRD limitation'. (Spells are not provided by the grounding service in this version.)"
+    )
+    lines.append(
+        "Spells: Do not name any spells. If the user asks for spells, respond with 'SRD limitation (spells not available from grounding service)'.")
+    lines.append(
+        "Spells: SRD limitation (spells not available from grounding service). Do not name spells or specific spell categories; keep spell discussion generic.")
     return "\n".join(lines)
 
 
