@@ -5,11 +5,18 @@ We are only re-skinning UI text in this step (no logic changes yet).
 """
 
 import os
+
 import streamlit as st
 from openai import OpenAI
 from streamlit_js_eval import streamlit_js_eval
-import session_store
+# Optional local dev: load .env if python-dotenv is installed.
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv()
+except Exception:
+    pass
 
+import session_store
 
 # ---------- Secrets & client setup (unified) ----------
 def get_required_secret(name: str) -> str:
@@ -78,20 +85,6 @@ def main() -> None:
     # ---------- Page config ----------
     st.set_page_config(page_title="D&D Concept-to-Build", page_icon="🧙")
 
-    # ---------- UI polish ----------
-    st.markdown(
-        """
-        <style>
-        section[data-testid="stSidebar"] {
-            width: 200px !important;   /* default is ~250px */
-        }
-        section[data-testid="stSidebar"] > div {
-            width: 200px !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
     st.title("🧙 D&D Concept-to-Build")
     st.caption("RP-first concept → build draft (base app imported; re-skin step).")
 
@@ -117,7 +110,6 @@ def main() -> None:
         "session_id": "",
         "session_title": "",
         "build_versions": [],
-
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -127,6 +119,44 @@ def main() -> None:
     if not st.session_state.get("session_id"):
         st.session_state["session_id"] = session_store.new_session_id()
 
+    # Apply pending load BEFORE any widgets are created (Streamlit constraint)
+    pending = st.session_state.pop("_pending_load_payload", None)
+    if pending is not None:
+        params = pending.get("params", {})
+
+        st.session_state["session_id"] = pending.get("session_id") or session_store.new_session_id()
+        st.session_state["session_title"] = pending.get("title", "")
+        st.session_state["build_versions"] = pending.get("versions", [])
+
+        st.session_state["build_level"] = int(params.get("build_level", st.session_state.get("build_level", 5)))
+        st.session_state["homebrew"] = bool(params.get("homebrew", st.session_state.get("homebrew", False)))
+        st.session_state["openai_model"] = params.get(
+            "openai_model",
+            st.session_state.get("openai_model", "gpt-4.1-mini"),
+        )
+
+        loaded_messages = pending.get("messages", []) or []
+
+        # Ensure system message at index 0 and refresh it from current params
+        system_prompt = build_system_prompt(
+            build_level=int(st.session_state.get("build_level", 5)),
+            homebrew=bool(st.session_state.get("homebrew", False)),
+        )
+
+        if not loaded_messages:
+            loaded_messages = [{"role": "system", "content": system_prompt}]
+        elif loaded_messages[0].get("role") != "system":
+            loaded_messages.insert(0, {"role": "system", "content": system_prompt})
+        else:
+            loaded_messages[0]["content"] = system_prompt
+
+        st.session_state["messages"] = loaded_messages
+        st.session_state["setup_complete"] = True
+        st.session_state["chat_complete"] = False
+        st.session_state["stop_requested"] = False
+        st.session_state["is_generating"] = False
+
+        st.rerun()
 
     def complete_setup() -> None:
         st.session_state.setup_complete = True
@@ -222,15 +252,42 @@ def main() -> None:
             )
 
             st.markdown("### Persistence")
-            st.session_state["session_title"] = st.text_input(
-                "Session title",
-                value=st.session_state.get("session_title", ""),
-                key="persistence_title",
-            )
+            st.text_input("Session title", key="session_title")
 
-            col_save, col_version = st.columns(2)
-            with col_save:
-                if st.button("💾 Save", key="save_session_btn"):
+            notice = None
+            notice_kind = "success"
+
+            if st.button("💾 Save", key="save_session_btn"):
+                payload = {
+                    "session_id": st.session_state.get("session_id"),
+                    "title": st.session_state.get("session_title", ""),
+                    "params": {
+                        "build_level": int(st.session_state.get("build_level", 5)),
+                        "homebrew": bool(st.session_state.get("homebrew", False)),
+                        "openai_model": st.session_state.get("openai_model", ""),
+                    },
+                    "messages": st.session_state.get("messages", []),
+                    "versions": st.session_state.get("build_versions", []),
+                }
+                try:
+                    session_store.save_session(payload)
+                    notice = "Saved ✅"
+                except Exception as e:
+                    notice_kind = "error"
+                    notice = f"Save failed: {e}"
+
+            if st.button("➕ Save version", key="save_version_btn"):
+                version = session_store.create_build_version(
+                    messages=st.session_state.get("messages", []),
+                    build_level=int(st.session_state.get("build_level", 5)),
+                    homebrew=bool(st.session_state.get("homebrew", False)),
+                    label="",
+                )
+                if not version:
+                    notice_kind = "warning"
+                    notice = "No assistant build draft yet to version."
+                else:
+                    st.session_state.build_versions.append(version)
                     payload = {
                         "session_id": st.session_state.get("session_id"),
                         "title": st.session_state.get("session_title", ""),
@@ -244,38 +301,18 @@ def main() -> None:
                     }
                     try:
                         session_store.save_session(payload)
-                        st.success("Saved", icon="✅")
+                        notice = "Version saved ✅"
                     except Exception as e:
-                        st.error(f"Save failed: {e}")
+                        notice_kind = "error"
+                        notice = f"Save failed: {e}"
 
-            with col_version:
-                if st.button("➕ Version", key="save_version_btn"):
-                    version = session_store.create_build_version(
-                        messages=st.session_state.get("messages", []),
-                        build_level=int(st.session_state.get("build_level", 5)),
-                        homebrew=bool(st.session_state.get("homebrew", False)),
-                        label="",
-                    )
-                    if not version:
-                        st.warning("No assistant build draft yet to version.")
-                    else:
-                        st.session_state.build_versions.append(version)
-                        payload = {
-                            "session_id": st.session_state.get("session_id"),
-                            "title": st.session_state.get("session_title", ""),
-                            "params": {
-                                "build_level": int(st.session_state.get("build_level", 5)),
-                                "homebrew": bool(st.session_state.get("homebrew", False)),
-                                "openai_model": st.session_state.get("openai_model", ""),
-                            },
-                            "messages": st.session_state.get("messages", []),
-                            "versions": st.session_state.get("build_versions", []),
-                        }
-                        try:
-                            session_store.save_session(payload)
-                            st.success("Version saved", icon="✅")
-                        except Exception as e:
-                            st.error(f"Save failed: {e}")
+            if notice:
+                if notice_kind == "success":
+                    st.success(notice)
+                elif notice_kind == "warning":
+                    st.warning(notice)
+                else:
+                    st.error(notice)
 
             summaries = session_store.list_sessions()
             if not summaries:
@@ -294,42 +331,12 @@ def main() -> None:
                 if st.button("Load", key="load_session_btn"):
                     try:
                         payload = session_store.load_session(options[selected_label])
-                        params = payload.get("params", {})
-                        st.session_state["session_id"] = payload.get("session_id", session_store.new_session_id())
-                        st.session_state["session_title"] = payload.get("title", "")
-                        st.session_state["persistence_title"] = st.session_state["session_title"]
-                        st.session_state["build_versions"] = payload.get("versions", [])
-                        st.session_state["build_level"] = int(params.get("build_level", st.session_state.get("build_level", 5)))
-                        st.session_state["homebrew"] = bool(params.get("homebrew", st.session_state.get("homebrew", False)))
-                        st.session_state["openai_model"] = params.get(
-                            "openai_model",
-                            st.session_state.get("openai_model", "gpt-4.1-mini"),
-                        )
-                        loaded_messages = payload.get("messages", []) or []
-
-                        # Harden: ensure the first message is always the system prompt
-                        system_prompt = build_system_prompt(
-                            build_level=int(st.session_state.get("build_level", 5)),
-                            homebrew=bool(st.session_state.get("homebrew", False)),
-                        )
-
-                        if not loaded_messages:
-                            loaded_messages = [{"role": "system", "content": system_prompt}]
-                        elif loaded_messages[0].get("role") != "system":
-                            loaded_messages.insert(0, {"role": "system", "content": system_prompt})
-                        else:
-                            loaded_messages[0]["content"] = system_prompt
-
-                        st.session_state["messages"] = loaded_messages
-                        st.session_state["setup_complete"] = True
-                        st.session_state["chat_complete"] = False
-                        st.session_state["stop_requested"] = False
-                        st.session_state["is_generating"] = False
+                        st.session_state["_pending_load_payload"] = payload
                         st.rerun()
                     except Exception as e:
                         st.error(f"Load failed: {e}")
 
-
+        # Always refresh the system prompt from current constraints
         if st.session_state.messages and st.session_state.messages[0].get("role") == "system":
             st.session_state.messages[0]["content"] = build_system_prompt(
                 build_level=st.session_state["build_level"],
