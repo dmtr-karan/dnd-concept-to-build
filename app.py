@@ -5,6 +5,7 @@ We are only re-skinning UI text in this step (no logic changes yet).
 """
 
 import os
+import re
 
 import streamlit as st
 from openai import OpenAI
@@ -17,6 +18,8 @@ except Exception:
     pass
 
 import session_store
+import srd_client
+
 
 # ---------- Secrets & client setup (unified) ----------
 def get_required_secret(name: str) -> str:
@@ -83,6 +86,63 @@ def build_system_prompt(build_level: int, homebrew: bool) -> str:
         "(6) Short RP hooks (2–4 bullets).\n"
         "- Keep it concise and practical. No copyrighted text.\n"
     )
+
+def get_optional_setting(name: str, default: str = "") -> str:
+    """Return optional setting from env (local) or st.secrets (Cloud); never stops the app."""
+    value = os.getenv(name)
+    if value:
+        return value
+    try:
+        return str(st.secrets.get(name, default))  # type: ignore[attr-defined]
+    except Exception:
+        return default
+
+
+def build_grounded_srd_block(class_payload: dict, target_level: int) -> str:
+    """
+    Build a short, SRD-safe grounding block from the SRD API class payload.
+    Keep this concise: names + brief descriptors only (no long rules text).
+    """
+    name = class_payload.get("name", "Unknown")
+    hit_die = class_payload.get("hit_die", None)
+    primary = class_payload.get("primary_abilities", [])
+    saves = class_payload.get("saving_throw_proficiencies", [])
+    profs = class_payload.get("proficiencies", [])
+
+    # features_by_level is a list like: [{"level": 1, "features": [{"name": "...", ...}, ...]}, ...]
+    feats = []
+    for entry in class_payload.get("features_by_level", []) or []:
+        lvl = entry.get("level")
+        if isinstance(lvl, int) and lvl <= int(target_level):
+            for f in entry.get("features", []) or []:
+                fname = f.get("name")
+                if isinstance(fname, str) and fname.strip():
+                    feats.append(f"Level {lvl}: {fname.strip()}")
+
+    lines = [
+        "Grounded SRD Facts (from SRD grounding service):",
+        f"- Class: {name}",
+    ]
+    if isinstance(hit_die, int):
+        lines.append(f"- Hit Die: d{hit_die}")
+    if isinstance(primary, list) and primary:
+        lines.append(f"- Primary abilities: {', '.join(str(x) for x in primary)}")
+    if isinstance(saves, list) and saves:
+        lines.append(f"- Saving throw proficiencies: {', '.join(str(x) for x in saves)}")
+    if isinstance(profs, list) and profs:
+        # keep short
+        lines.append(f"- Proficiencies (summary): {', '.join(str(x) for x in profs[:6])}")
+    if feats:
+        lines.append("- Features (names up to target level):")
+        lines.extend([f"  - {x}" for x in feats[:20]])  # cap for token safety
+    else:
+        lines.append("- Features: (not available from grounding payload)")
+
+    lines.append(
+        "Rule: Treat the Grounded SRD Facts above as authoritative SRD truth. "
+        "If a detail is not present above, do NOT assert it as SRD; either omit it or say 'SRD limitation'."
+    )
+    return "\n".join(lines)
 
 
 def main() -> None:
@@ -373,9 +433,28 @@ def main() -> None:
                             st.markdown(prompt)
 
                         with st.chat_message("assistant"):
+                            # Optional SRD grounding service (local/dev): set SRD_API_BASE_URL to enable.
+                            srd_base = get_optional_setting("SRD_API_BASE_URL", default="").strip()
+
+                            # Detect one of the shipped SRD classes from the user prompt (minimal, deterministic).
+                            grounding_block = ""
+                            m = re.search(r"\b(barbarian|bard|fighter|wizard)\b", prompt.lower())
+                            if srd_base and m:
+                                class_name = m.group(1)
+                                class_payload, err = srd_client.get_class(srd_base, class_name)
+                                if class_payload and not err:
+                                    grounding_block = build_grounded_srd_block(class_payload, target_level=int(
+                                        st.session_state["build_level"]))
+
+                            # Build messages for the API call: system prompt + optional grounding appended (without mutating stored history).
+                            api_messages = [{"role": mm["role"], "content": mm["content"]} for mm in
+                                            st.session_state.messages]
+                            if api_messages and api_messages[0]["role"] == "system" and grounding_block:
+                                api_messages[0]["content"] = api_messages[0]["content"] + "\n\n" + grounding_block
+
                             stream = client.chat.completions.create(
                                 model=st.session_state["openai_model"],
-                                messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
+                                messages=api_messages,
                                 stream=True,
                             )
 
