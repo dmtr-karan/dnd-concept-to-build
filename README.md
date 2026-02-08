@@ -10,9 +10,9 @@ RP-first concept -> playable D&D 5e build draft (SRD-only by default).
   - If user requests homebrew while OFF: stay SRD-only and suggest enabling Homebrew.
 
 ## Why this project
-- Portfolio-friendly Streamlit app that demonstrates **testable AI guardrails** and a repeatable “concept -> draft build” workflow.
-- Focus: produce a practical **draft build outline** (not a full character sheet generator).
-- Constraint: **SRD-only** output by default so the repo is safe to publish and easy to reproduce.
+- A small Streamlit app exploring prompt guardrails and a repeatable “concept → build draft” workflow.
+- Scope: generates a practical build outline (not a full character sheet generator).
+- Public default: SRD-only output to keep the repo safe to publish and easy to reproduce.
 
 ## SRD-only stance (public mode)
 This repo intentionally stays **SRD-only**:
@@ -33,18 +33,23 @@ Docs:
 |   pytest.ini
 |   requirements-dev.txt
 |   requirements.txt
+|   session_store.py
+|   srd_client.py
 |
 +---.github
 |   \---workflows
 |           ci.yml
 |
 +---docs
-|       spec.md
+|       README.md
 |       ai-guardrails.md
+|       spec.md
 |
 \---tests
+    |   conftest.py
     |   test_import.py
     |   test_smoke.py
+    |   test_srd_grounding_block.py
     |
     +---contract
     |       test_required_sections.py
@@ -54,6 +59,7 @@ Docs:
             test_guardrails_present.py
             test_hb_toggle_behavior.py
             test_no_empty_append.py
+            test_session_store.py
 ```
 
 ## Run locally
@@ -107,5 +113,5 @@ Run only contract:
 - `python -m pytest -m contract`
 
 ## Future work
-- Export validators / formal contracts
+- Exports: JSON schemas + validators (in progress)
 - UX polish beyond documentation references
