@@ -1,5 +1,7 @@
 # dnd-concept-to-build
 
+[![CI](https://github.com/dmtr-karan/dnd-concept-to-build/actions/workflows/ci.yml/badge.svg)](https://github.com/dmtr-karan/dnd-concept-to-build/actions/workflows/ci.yml)
+
 RP-first concept -> playable D&D 5e build draft (SRD-only by default).
 
 ## Current state (v0.1)
