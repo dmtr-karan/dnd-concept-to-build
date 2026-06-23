@@ -5,7 +5,7 @@
 RP-first concept -> playable D&D 5e build draft (SRD-only by default).
 
 ## Current state (v0.1)
-- Streamlit chat app scaffold works locally.
+- * Streamlit chat application supports concept-to-build generation, streamed responses, optional SRD grounding, and local session persistence.
 - **Public mode is SRD-only by design.**
 - Optional **Homebrew** via UI toggle:
   - Homebrew OFF: SRD-only output.
