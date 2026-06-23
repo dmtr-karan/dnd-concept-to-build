@@ -1,7 +1,8 @@
-"""D&D Concept-to-Build (RP-first).
+"""D&D Concept-to-Build: an RP-first Streamlit application that turns
+character concepts into structured D&D 5e build drafts.
 
-Current stage: base app imported from interview simulator.
-We are only re-skinning UI text in this step (no logic changes yet).
+The app supports SRD-only guardrails, optional grounded class data,
+streamed model responses, and local session persistence.
 """
 
 import os
